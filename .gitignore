@@ -1,0 +1,9 @@
+node_modules/
+.env
+.next/
+build/
+artifacts/
+dist/
+.DS_Store
+*.log
+coverage/
