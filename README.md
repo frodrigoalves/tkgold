@@ -1,24 +1,23 @@
-# Tokenized Gold
+# Tokenized Gold â€“ Plataforma MVP
 
-Repositório inicial do projeto Tokenized Gold.
-
-## Estrutura
-
-- frontend/: Frontend (Next.js + Tailwind)
-- backend/: Backend (Node.js + Express)
-- contracts/: Smart contracts (Solidity)
-
-## Roadmap
-
-- [ ] Estrutura do Monorepo
-- [ ] Backend básico
-- [ ] Banco de dados e modelos
-- [ ] Frontend básico
-- [ ] Autenticação
-- [ ] KYC
-- [ ] Token GOLD
-- [ ] Trading/DeFi/Resgate físico
+Tokenized Gold Ã© uma plataforma de tokenizaÃ§Ã£o de ativos lastreados em ouro, integrando DeFi, contratos inteligentes e identidade verificada.
 
 ---
 
-Cada módulo só avança após revisão técnica.
+## Estrutura do Projeto
+
+- `frontend/`: Interface (Next.js + TailwindCSS)
+- `backend/`: API Node.js com Express
+- `contracts/`: Smart contracts em Solidity (ERC20, staking, emprÃ©stimos)
+- `api/`: Alternativa leve ao backend principal, com endpoints para KYC e trading
+
+---
+
+## Como executar localmente
+
+### Instalar dependÃªncias:
+
+```bash
+cd api && npm install
+cd ../contracts && npm install # se existir package.json
+cd ../frontend && npm install

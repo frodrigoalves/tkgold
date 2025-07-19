@@ -1,5 +1,6 @@
 node_modules/
 .env
+<<<<<<< HEAD
 .next/
 build/
 artifacts/
@@ -7,3 +8,11 @@ dist/
 .DS_Store
 *.log
 coverage/
+=======
+.env.*
+build/
+dist/
+.cache/
+*.log
+.DS_Store
+>>>>>>> 912c4e3332bf0698f0d45c25d74ae6eaed305f85

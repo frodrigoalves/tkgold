@@ -32,9 +32,9 @@ export default function BorrowPage() {
   const [auth, setAuth] = useState(null);
 
   // Declarar variáveis globais para o ESLint
-  const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-  const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-  const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+  const appId = typeof  !== 'undefined' ?  : 'default-app-id';
+  const firebaseConfig = typeof firebaseConfig !== 'undefined' ? JSON.parse(firebaseConfig) : {};
+  const initialAuthToken = typeof  !== 'undefined' ?  : null;
 
   // Inicialização do Firebase e Listener de Autenticação
   useEffect(() => {
