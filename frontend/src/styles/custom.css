@@ -1,0 +1,51 @@
+/* src/styles/custom.css */
+
+/* --- DIRETIVAS TAILWIND CSS (OBRIGATÓRIO NO TOPO) --- */
+/* Estas diretivas são substituídas pelo CSS gerado pelo Tailwind durante o build. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Este arquivo pode ser usado para adicionar estilos CSS personalizados
+  que complementam ou sobrescrevem as classes do Tailwind CSS.
+*/
+
+/* Exemplo de reset básico para a fonte principal */
+body {
+  font-family: 'Inter', sans-serif; /* Usando a fonte definida no tailwind.config.js */
+  margin: 0;
+  padding: 0;
+  /* Definir a cor de fundo global aqui, se desejar */
+  background-color: #0D0D0D; /* Cor darkBackground da sua paleta */
+  color: #FFFFFF; /* Cor whiteText da sua paleta */
+}
+
+/* Customização da barra de rolagem (para uma aparência mais elegante) */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1A1A1A; /* Cor do fundo da trilha da barra de rolagem (cardBackground) */
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #FFD700; /* Cor do "polegar" da barra de rolagem (goldPrimary) */
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #DAA520; /* Cor do "polegar" da barra de rolagem ao passar o mouse */
+}
+
+/* Estilo para radio personalizado (acento cor dourada) */
+input[type="radio"] {
+  accent-color: #FFD700; /* Cor primária do ouro */
+}
+
+/* Estilo para checkbox personalizado (azul escuro) */
+input[type="checkbox"] {
+  accent-color: #000080; /* Cor de destaque azul */
+}

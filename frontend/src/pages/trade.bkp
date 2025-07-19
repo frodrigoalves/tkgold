@@ -1,0 +1,541 @@
+const __app_id = 'mock_app_id';
+const __firebase_config = { apiKey: 'dummy_key', authDomain: 'dummy.firebaseapp.com' };
+const __initial_auth_token = 'dummy_token';
+import React, { useState, useEffect } from 'react';
+import { Line } from 'react-chartjs-2';
+import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
+import { RefreshCcw, ArrowLeft, TrendingUp, TrendingDown, DollarSign, BarChart2, Loader, CheckCircle, XCircle, Info, Clock, User } from 'lucide-react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
+
+
+
+// Importações do Firebase (assumindo que estão disponíveis globalmente ou via sistema de build)
+
+// Registrar componentes do Chart.js
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
+
+// Definir paleta de cores Gold DAO
+const colors = {
+  darkBackground: '#0D0D0D', // Preto profundo
+  cardBackground: '#1A1A1A', // Preto ligeiramente mais claro para cards
+  goldPrimary: '#FFD700',    // Dourado vibrante
+  blueAccent: '#000080',     // Azul escuro
+  whiteText: '#FFFFFF',      // Branco puro
+  lightGrey: '#B0B0B0',      // Cinza claro para texto secundário
+  greenSuccess: '#28A745',   // Verde para sucesso/ativo
+  redError: '#DC3545',       // Vermelho para erro/inativo
+};
+
+// Componente de Botão Reutilizável
+const Button = ({ children, icon: Icon, onClick, className = '', type = 'button', disabled = false }) => (
+  <button
+    type={type}
+    onClick={onClick}
+    disabled={disabled}
+    className={`flex items-center justify-center px-6 py-3 rounded-full font-semibold text-lg transition-all duration-300 ease-in-out
+                bg-gradient-to-r from-[${colors.goldPrimary}] to-yellow-600 text-black
+                hover:from-yellow-600 hover:to-[${colors.goldPrimary}] hover:shadow-xl
+                focus:outline-none focus:ring-4 focus:ring-yellow-500 focus:ring-opacity-50 w-full mb-2
+                ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
+                ${className}`}
+  >
+    {Icon && <Icon size={20} className="mr-2" />}
+    {children}
+  </button>
+);
+
+// Componente de Status KYC para exibir o status de verificação
+const KycStatus = ({ status }) => {
+  let icon, color, text;
+  switch (status) {
+    case 'approved':
+      icon = CheckCircle;
+      color = colors.greenSuccess;
+      text = 'Verificado';
+      break;
+    case 'pending':
+      icon = Clock;
+      color = colors.goldPrimary;
+      text = 'Pendente';
+      break;
+    case 'rejected':
+      icon = XCircle;
+      color = colors.redError;
+      text = 'Rejeitado';
+      break;
+    default:
+      icon = Info;
+      color = colors.lightGrey;
+      text = 'Não Iniciado';
+  }
+
+  const IconComponent = icon;
+
+  return (
+    <div className="flex items-center space-x-2">
+      <IconComponent size={20} color={color} />
+      <span className={`font-semibold text-lg`} style={{ color }}>Status KYC: {text}</span>
+    </div>
+  );
+};
+
+export default function TradePage() {
+  const [currentPair, setCurrentPair] = useState('GOLD/USDT');
+  const [tradeType, setTradeType] = useState('buy'); // 'buy' ou 'sell'
+  const [amount, setAmount] = useState('');
+  const [price, setPrice] = useState(0); // Preço atual do GOLD
+  const [total, setTotal] = useState(0);
+  const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [loading, setLoading] = useState(true); // Definido como true inicialmente para busca de dados
+  const [usdBalance, setUsdBalance] = useState(0);
+  const [goldBalance, setGoldBalance] = useState(0);
+  const [kycStatus, setKycStatus] = useState('not_started');
+  const [userId, setUserId] = useState(null);
+  const [db, setDb] = useState(null);
+  const [auth, setAuth] = useState(null);
+
+
+  // Dados simulados para o gráfico de preços
+  const [chartData, setChartData] = useState({
+    labels: ['9 AM', '10 AM', '11 AM', '12 PM', '1 PM', '2 PM', '3 PM'],
+    datasets: [
+      {
+        label: 'Preço do GOLD (USD)',
+        data: [2100, 2110, 2095, 2120, 2105, 2130, 2125],
+        fill: false,
+        borderColor: colors.goldPrimary,
+        tension: 0.1,
+      },
+    ],
+  });
+
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        labels: {
+          color: colors.whiteText,
+        },
+      },
+      title: {
+        display: true,
+        text: `Gráfico de Preço ${currentPair}`,
+        color: colors.whiteText,
+      },
+      tooltip: {
+        backgroundColor: colors.cardBackground,
+        titleColor: colors.goldPrimary,
+        bodyColor: colors.whiteText,
+        borderColor: colors.goldPrimary,
+        borderWidth: 1,
+      }
+    },
+    scales: {
+      x: {
+        ticks: { color: colors.lightGrey },
+        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+      },
+      y: {
+        ticks: { color: colors.lightGrey },
+        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+      },
+    },
+  };
+
+  // Inicialização do Firebase e Listener de Autenticação
+  useEffect(() => {
+    try {
+
+      const app = initializeApp(firebaseConfig);
+      const firestore = getFirestore(app);
+      const firebaseAuth = getAuth(app);
+
+      setDb(firestore);
+      setAuth(firebaseAuth);
+
+      const unsubscribe = onAuthStateChanged(firebaseAuth, async (user) => {
+        if (user) {
+          setUserId(user.uid);
+        } else {
+          // Autenticar anonimamente se nenhum user estiver autenticado
+          } else {
+            await signInAnonymously(firebaseAuth);
+          }
+        }
+        setLoading(false); // O estado de autenticação está pronto
+      });
+
+      return () => unsubscribe();
+    } catch (e) {
+      console.error("Erro de inicialização do Firebase:", e);
+      setError("Falha ao inicializar os serviços da aplicação.");
+      setLoading(false);
+    }
+  }, []);
+
+  // Buscar dados do user e preço do ouro
+  useEffect(() => {
+    if (!db || !userId) return; // Esperar o Firebase ser inicializado e o ID do user ser definido
+
+    const fetchBalancesAndStatus = () => {
+
+      // Ouvir atualizações em tempo real dos saldos da carteira
+      const unsubscribeWallet = onSnapshot(userDocRef, (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setUsdBalance(data.balanceUSD || 0);
+          setGoldBalance(data.balanceGOLD || 0);
+        } else {
+          // Inicializar saldos se o documento não existir
+          setDoc(userDocRef, { balanceUSD: 0, balanceGOLD: 0 }, { merge: true });
+        }
+      }, (error) => {
+        console.error("Erro ao buscar dados da carteira:", error);
+        setError("Falha ao carregar dados da carteira.");
+      });
+
+      // Ouvir atualizações em tempo real do status KYC
+      const unsubscribeKyc = onSnapshot(kycDocRef, (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setKycStatus(data.status || 'not_started');
+        } else {
+          // Inicializar status KYC se o documento não existir
+          setDoc(kycDocRef, { status: 'not_started' }, { merge: true });
+        }
+      }, (error) => {
+        console.error("Erro ao buscar status KYC:", error);
+        setError("Falha ao carregar status KYC.");
+      });
+
+      return () => {
+        unsubscribeWallet();
+        unsubscribeKyc();
+      };
+    };
+
+    const fetchGoldPrice = async () => {
+      // Usando preço simulado para evitar erros de URL no ambiente atual
+      // TODO: Substituir por chamada real à API do seu backend GET /api/gold/price
+      const simulatedPrice = (Math.random() * (2150 - 2100) + 2100).toFixed(2);
+      setPrice(parseFloat(simulatedPrice));
+      console.warn("Usando preço de ouro simulado. A chamada real da API está comentada para evitar erros de URL.");
+    };
+
+    fetchBalancesAndStatus();
+    fetchGoldPrice(); // Buscar preço ao montar o componente
+    const priceInterval = setInterval(fetchGoldPrice, 10000); // Atualizar preço a cada 10 segundos
+
+    // Simular atualizações de dados do gráfico
+    const chartInterval = setInterval(() => {
+      setChartData(prevData => {
+        const newPrice = (Math.random() * (2150 - 2100) + 2100).toFixed(2);
+        const newData = [...prevData.datasets[0].data.slice(1), parseFloat(newPrice)];
+        const newLabels = [...prevData.labels.slice(1), new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })];
+        return {
+          labels: newLabels,
+          datasets: [{ ...prevData.datasets[0], data: newData }],
+        };
+      });
+    }, 5000); // Atualizar gráfico a cada 5 segundos
+
+    return () => {
+      clearInterval(priceInterval);
+      clearInterval(chartInterval);
+    };
+  }, [db, userId]); // Depender de db e userId
+
+  // Calcular total com base na quantidade e preço
+  useEffect(() => {
+    if (amount && price) {
+      setTotal((parseFloat(amount) * price).toFixed(2));
+    } else {
+      setTotal(0);
+    }
+  }, [amount, price]);
+
+  const handleTrade = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccessMessage('');
+    setLoading(true);
+
+    if (!amount || parseFloat(amount) <= 0) {
+      setError('Por favor, insira uma quantidade válida.');
+      setLoading(false);
+      return;
+    }
+
+    const tradeAmount = parseFloat(amount);
+    const tradeTotal = parseFloat(total);
+
+    if (tradeType === 'buy') {
+      if (usdBalance < tradeTotal) {
+        setError('Saldo USD insuficiente.');
+        setLoading(false);
+        return;
+      }
+      // Removida a chamada real à API para evitar erros de URL no ambiente atual
+      // TODO: Integrar com o backend POST /api/gold/buy
+      const payload = { amount: tradeAmount, price: price, total: tradeTotal };
+      console.log("Simulando operação de compra com payload:", payload);
+      try {
+        // Simular sucesso da chamada API
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Simular atraso de rede
+
+        setSuccessMessage(`Comprado com sucesso ${tradeAmount} GOLD.`);
+        // Atualizar saldos localmente após operação simulada de sucesso
+        if (db && userId) {
+          await updateDoc(userDocRef, {
+            balanceUSD: usdBalance - tradeTotal,
+            balanceGOLD: goldBalance + tradeAmount
+          });
+        }
+        setAmount('');
+      } catch (err) {
+        console.error('Erro na compra de GOLD:', err);
+        setError('Ocorreu um erro inesperado durante a compra.');
+      } finally {
+        setLoading(false);
+      }
+
+    } else { // tradeType === 'sell'
+      if (goldBalance < tradeAmount) {
+        setError('Saldo GOLD insuficiente.');
+        setLoading(false);
+        return;
+      }
+      // Removida a chamada real à API para evitar erros de URL no ambiente atual
+      // TODO: Integrar com o backend POST /api/gold/sell
+      const payload = { amount: tradeAmount, price: price, total: tradeTotal };
+      console.log("Simulando operação de venda com payload:", payload);
+      try {
+        // Simular sucesso da chamada API
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Simular atraso de rede
+
+        setSuccessMessage(`Vendido com sucesso ${tradeAmount} GOLD.`);
+        // Atualizar saldos localmente após operação simulada de sucesso
+        if (db && userId) {
+          await updateDoc(userDocRef, {
+            balanceUSD: usdBalance + tradeTotal,
+            balanceGOLD: goldBalance - tradeAmount
+          });
+        }
+        setAmount('');
+      } catch (err) {
+        console.error('Erro na venda de GOLD:', err);
+        setError('Ocorreu um erro inesperado durante a venda.');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const handleNavigation = (path) => {
+    window.location.href = path; // Usar window.location.href para navegação
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: colors.darkBackground, color: colors.whiteText }}>
+        <p className="text-xl flex items-center"><Loader size={24} className="animate-spin mr-3" /> A carregar dados...</p>
+      </div>
+    );
+  }
+
+  if (error && !loading) { // Exibir erro se não estiver a carregar
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4" style={{ backgroundColor: colors.darkBackground, color: colors.redError }}>
+        <XCircle size={48} className="mb-4" />
+        <p className="text-xl text-center">Erro: {error}</p>
+        <Button onClick={() => window.location.reload()} className="mt-6">Tentar Novamente</Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen p-8 font-inter" style={{ backgroundColor: colors.darkBackground, color: colors.whiteText }}>
+      {/* Cabeçalho */}
+      <header className="flex flex-col md:flex-row justify-between items-center mb-12">
+        <div className="flex items-center mb-4 md:mb-0">
+          <button onClick={() => handleNavigation('/dashboard')} className="text-gray-400 hover:text-yellow-500 transition-colors duration-200 mr-4">
+            <ArrowLeft size={24} />
+          </button>
+          <img src="https://placehold.co/60x60/FFD700/000000?text=SL" alt="Logótipo Superland" className="rounded-full mr-4" />
+          <h1 className="text-4xl font-bold" style={{ color: colors.goldPrimary }}>Superland</h1>
+        </div>
+        <nav className="flex space-x-6">
+          <a href="#" onClick={() => handleNavigation('/dashboard')} className="text-lg font-medium hover:text-yellow-500 transition-colors duration-200">Painel</a>
+          <a href="#" onClick={() => handleNavigation('/trade')} className="text-lg font-medium hover:text-yellow-500 transition-colors duration-200">Negociar</a>
+          <a href="#" onClick={() => handleNavigation('/borrow')} className="text-lg font-medium hover:text-yellow-500 transition-colors duration-200">Empréstimo</a>
+          <a href="#" onClick={() => handleNavigation('/redeem')} className="text-lg font-medium hover:text-yellow-500 transition-colors duration-200">Resgatar</a>
+        </nav>
+        {userId && (
+          <div className="flex items-center mt-4 md:mt-0">
+            <span className="text-sm text-gray-400 mr-2">ID do Utilizador:</span>
+            <span className="text-sm font-mono" style={{ color: colors.whiteText }}>{userId}</span>
+          </div>
+        )}
+      </header>
+
+      <h2 className="text-4xl font-bold text-center mb-10" style={{ color: colors.whiteText }}>
+        Negociar <span style={{ color: colors.goldPrimary }}>GOLD</span>
+      </h2>
+
+      {error && (
+        <div className="mb-6 p-4 rounded-lg flex items-center justify-center" style={{ backgroundColor: colors.redError, color: colors.whiteText }}>
+          <XCircle size={24} className="mr-3" />
+          <p className="text-lg">{error}</p>
+        </div>
+      )}
+
+      {successMessage && (
+        <div className="mb-6 p-4 rounded-lg flex items-center justify-center" style={{ backgroundColor: colors.greenSuccess, color: colors.whiteText }}>
+          <CheckCircle size={24} className="mr-3" />
+          <p className="text-lg">{successMessage}</p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Gráfico de Negociação */}
+        <div className="lg:col-span-2">
+          <div className={`bg-[${colors.cardBackground}] rounded-xl shadow-lg p-6 h-96 mb-8`}>
+            <Line data={chartData} options={chartOptions} />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className={`bg-[${colors.cardBackground}] rounded-xl shadow-lg p-6`}>
+              <div className="flex items-center mb-4">
+                <DollarSign size={28} color={colors.goldPrimary} className="mr-3" />
+                <h3 className="text-2xl font-semibold" style={{ color: colors.whiteText }}>Seu Saldo USD</h3>
+              </div>
+              <p className="text-4xl font-bold" style={{ color: colors.whiteText }}>${usdBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+            </div>
+            <div className={`bg-[${colors.cardBackground}] rounded-xl shadow-lg p-6`}>
+              <div className="flex items-center mb-4">
+                <BarChart2 size={28} color={colors.goldPrimary} className="mr-3" />
+                <h3 className="text-2xl font-semibold" style={{ color: colors.whiteText }}>Seu Saldo GOLD</h3>
+              </div>
+              <p className="text-4xl font-bold" style={{ color: colors.whiteText }}>{goldBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })} oz</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Formulário de Negociação */}
+        <div className={`bg-[${colors.cardBackground}] rounded-xl shadow-lg p-6`}>
+          <div className="flex mb-6 border-b border-gray-700">
+            <button
+              onClick={() => setTradeType('buy')}
+              className={`flex-1 py-3 text-center text-xl font-semibold ${tradeType === 'buy' ? 'border-b-4 border-yellow-500 text-[${colors.goldPrimary}]' : 'text-gray-400 hover:text-white'}`}
+            >
+              Comprar
+            </button>
+            <button
+              onClick={() => setTradeType('sell')}
+              className={`flex-1 py-3 text-center text-xl font-semibold ${tradeType === 'sell' ? 'border-b-4 border-yellow-500 text-[${colors.goldPrimary}]' : 'text-gray-400 hover:text-white'}`}
+            >
+              Vender
+            </button>
+          </div>
+
+          <div className="mb-6">
+            <label className="block mb-2 text-lg" style={{ color: colors.lightGrey }}>
+              Par
+            </label>
+            <div className="flex items-center bg-[#181818] rounded-lg p-3">
+              <span className="text-white">GOLD / USDT</span> {/* Por enquanto, par fixo */}
+            </div>
+          </div>
+
+          <div className="mb-6">
+            <label htmlFor="amount" className="block mb-2 text-lg" style={{ color: colors.lightGrey }}>
+              Quantidade (GOLD)
+            </label>
+            <div className="flex items-center bg-[#181818] rounded-lg p-3">
+              <input
+                id="amount"
+                type="number"
+                step="0.0001"
+                className="bg-transparent outline-none w-full text-white placeholder-gray-500"
+                placeholder="0.00"
+                value={amount}
+                onChange={e => setAmount(e.target.value)}
+                required
+              />
+              <span className="text-gray-400 ml-2">oz</span>
+            </div>
+          </div>
+
+          <div className="mb-6">
+            <label className="block mb-2 text-lg" style={{ color: colors.lightGrey }}>
+              Preço por GOLD (USD)
+            </label>
+            <div className="flex items-center bg-[#181818] rounded-lg p-3">
+              <span className="text-white w-full">${price.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+            </div>
+          </div>
+
+          <div className="mb-8">
+            <label className="block mb-2 text-lg" style={{ color: colors.lightGrey }}>
+              Total ({tradeType === 'buy' ? 'USD' : 'GOLD'})
+            </label>
+            <div className="flex items-center bg-[#181818] rounded-lg p-3">
+              <span className="text-white w-full">${total.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+            </div>
+          </div>
+
+          <Button
+            icon={tradeType === 'buy' ? TrendingUp : TrendingDown}
+            onClick={handleTrade}
+            disabled={loading}
+            className={tradeType === 'buy' ? 'bg-gradient-to-r from-[${colors.goldPrimary}] to-yellow-600' : 'bg-gradient-to-r from-[${colors.blueAccent}] to-blue-800 hover:from-blue-800 hover:to-[${colors.blueAccent}] focus:ring-blue-500'}
+          >
+            {loading ? (
+              <span className="flex items-center">
+                <Loader size={20} className="animate-spin mr-2" /> A processar...
+              </span>
+            ) : (
+              tradeType === 'buy' ? 'Comprar GOLD' : 'Vender GOLD'
+            )}
+          </Button>
+        </div>
+      </div>
+
+      {/* Secção do Rodapé */}
+      <footer className="text-center text-gray-400 text-sm mt-12 py-8">
+        <p>&copy; {new Date().getFullYear()} Superland. Todos os direitos reservados.</p>
+        <p className="mt-2">
+          <a href="#" className="hover:text-yellow-500 transition-colors duration-200">Termos de Serviço</a> |{' '}
+          <a href="#" className="hover:text-yellow-500 transition-colors duration-200">Política de Privacidade</a>
+        </p>
+      </footer>
+
+      {/* Tailwind CSS CDN e configuração JIT para cores dinâmicas */}
+      <script src="https://cdn.tailwindcss.com"></script>
+      <script dangerouslySetInnerHTML={{ __html: `
+        tailwind.config = {
+          theme: {
+            extend: {
+              fontFamily: {
+                inter: ['Inter', 'sans-serif'],
+              },
+              colors: {
+                darkBackground: '${colors.darkBackground}',
+                cardBackground: '${colors.cardBackground}',
+                goldPrimary: '${colors.goldPrimary}',
+                blueAccent: '${colors.blueAccent}',
+                whiteText: '${colors.whiteText}',
+                lightGrey: '${colors.lightGrey}',
+                greenSuccess: '${colors.greenSuccess}',
+                redError: '${colors.redError}',
+              }
+            }
+          }
+        }
+      `}} />
+    </div>
+  );
+}

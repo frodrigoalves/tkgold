@@ -1,0 +1,71 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  # Serviço do Banco de Dados PostgreSQL
+  db:
+    image: postgres:13-alpine # Imagem leve do PostgreSQL
+    container_name: superland_db
+    restart: always
+    environment:
+      POSTGRES_DB: superland_db # Nome do banco de dados
+      POSTGRES_USER: user # Usuário do banco de dados
+      POSTGRES_PASSWORD: password # Senha do banco de dados
+    volumes:
+      - db_data:/var/lib/postgresql/data # Volume persistente para os dados do banco
+    ports:
+      - "5432:5432" # Mapeia a porta do host para a porta do container (opcional, para acesso direto)
+    networks:
+      - app_network
+
+  # Serviço do Backend (Node.js/Express)
+  backend:
+    build:
+      context: ./backend # Onde o Docker deve encontrar o Dockerfile e o código do backend
+      dockerfile: Dockerfile.backend # Nome do Dockerfile para o backend (vamos criar este)
+    container_name: superland_backend
+    restart: always
+    ports:
+      - "4000:4000" # Mapeia a porta 4000 do host para a porta 4000 do container
+    environment:
+      # Variáveis de ambiente para o backend
+      DATABASE_URL: postgresql://user:password@db:5432/superland_db?schema=public # URL de conexão com o banco de dados
+      JWT_SECRET: sua_chave_secreta_muito_segura_aqui # Chave secreta para JWT (MUDE ISSO EM PRODUÇÃO!)
+      PORT: 4000
+    volumes:
+      - ./backend:/app # Monta o código do backend para hot-reloading em desenvolvimento
+      - /app/node_modules # Garante que node_modules do container não seja sobrescrito pelo host
+    depends_on:
+      - db # Garante que o banco de dados inicie antes do backend
+    networks:
+      - app_network
+
+  # Serviço do Frontend (React)
+  frontend:
+    build:
+      context: ./frontend # Onde o Docker deve encontrar o Dockerfile e o código do frontend
+      dockerfile: Dockerfile.frontend # Nome do Dockerfile para o frontend (vamos criar este)
+    container_name: superland_frontend
+    restart: always
+    ports:
+      - "3000:3000" # Mapeia a porta 3000 do host para a porta 3000 do container
+    environment:
+      # Variáveis de ambiente para o frontend
+      # Aponta para o serviço de backend dentro da rede Docker
+      REACT_APP_API_URL: http://backend:4000/api # URL da API do backend para o frontend
+    volumes:
+      - ./frontend:/app # Monta o código do frontend para hot-reloading em desenvolvimento
+      - /app/node_modules # Garante que node_modules do container não seja sobrescrito pelo host
+    depends_on:
+      - backend # Garante que o backend inicie antes do frontend
+    networks:
+      - app_network
+
+# Redes
+networks:
+  app_network:
+    driver: bridge
+
+# Volumes para persistência de dados
+volumes:
+  db_data: # Volume nomeado para os dados do PostgreSQL

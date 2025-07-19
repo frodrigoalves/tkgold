@@ -1,0 +1,20 @@
+/* src/index.css */
+body {
+  margin: 0;
+  font-family: 'Inter', sans-serif; /* Garante que a fonte Inter seja usada */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #0D0D0D; /* Cor de fundo principal do seu tema */
+  color: #FFFFFF; /* Cor de texto padrão */
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* Você pode adicionar estilos globais adicionais aqui */
+/* Por exemplo, para garantir que a rolagem seja suave */
+html {
+  scroll-behavior: smooth;
+}
